@@ -18,10 +18,6 @@ RUN turbo prune flag-controller-ui --docker
 FROM base AS installer
 WORKDIR /app
 
-# NEXT_PUBLIC_* vars are baked into the JS bundle at build time by Next.js.
-ARG NEXT_PUBLIC_BETTER_AUTH_URL=http://localhost:8080
-ENV NEXT_PUBLIC_BETTER_AUTH_URL=$NEXT_PUBLIC_BETTER_AUTH_URL
-
 COPY --from=pruner /app/.pnpmfile.mjs ./.pnpmfile.mjs
 COPY --from=pruner /app/out/json/ .
 COPY --from=pruner /app/out/pnpm-lock.yaml ./pnpm-lock.yaml

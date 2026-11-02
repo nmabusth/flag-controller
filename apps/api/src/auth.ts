@@ -168,16 +168,6 @@ export const auth = betterAuth({
     }),
   ],
   trustedOrigins: getCorsOrigins(),
-  ...(process.env.AUTH_COOKIE_DOMAIN
-    ? {
-        advanced: {
-          crossSubDomainCookies: {
-            enabled: true,
-            domain: process.env.AUTH_COOKIE_DOMAIN,
-          },
-        },
-      }
-    : {}),
   socialProviders: {
     github: {
       clientId: process.env.GITHUB_CLIENT_ID as string,

@@ -116,6 +116,8 @@ The application runs migrations before starting by default and shuts down if mig
 
 ### CORS
 
+The UI forwards browser auth requests through its own origin, so CORS only matters for browsers that call the API directly.
+
 The API requires credentials for CORS requests (`credentials: true`), which means wildcard (`*`) origins are not supported. You must specify explicit origins via the `CORS_ORIGIN` environment variable. By default, the API allows `http://localhost:3000`.
 
 | Value | Behaviour |
@@ -141,7 +143,7 @@ CORS_ORIGIN=http://localhost:3000,https://my-ui.example.com
 
 The API uses [better-auth](https://www.better-auth.com/) for server-side authentication.
 
-> `BETTER_AUTH_URL` must point at this API and match the UI's value, and `BETTER_AUTH_SECRET` is required when `NODE_ENV=production`. See `.env.example` for details.
+> `BETTER_AUTH_URL` must be the UI's public URL, since the UI forwards `/api/auth/*` to this API. Set the GitHub OAuth callback to `<BETTER_AUTH_URL>/api/auth/callback/github`. `BETTER_AUTH_SECRET` is required when `NODE_ENV=production`. See `.env.example` for details.
 
 The implementation is split across several files:
 
@@ -221,16 +223,9 @@ Since the platform does not yet support user-facing organization management, eve
 
 When a new user is created, the API automatically checks whether a default organization already exists. If it does, the user is added with the `owner` role. If it does not, the organization is created with the user as its owner. New sessions also set that organization's ID as the active organization.
 
-#### Known limitation: cross-origin cookie sharing
+#### Cookies and deployment topology
 
-The session cookie is issued by this API. If the UI is served from a different
-origin than the API, the browser scopes the cookie to the API's hostname only.
-
-Deployment topologies:
-
-- **Same origin** (path-based routing, e.g. `example.com/api` and `example.com`): works out of the box.
-- **Sibling subdomains** (e.g. `api.example.com` and `app.example.com`): set `AUTH_COOKIE_DOMAIN=example.com` in the API's environment. Better Auth will broaden the cookie's `Domain` attribute to the shared parent so both subdomains receive it. See `.env.example` for details.
-- **Separate top-level domains** (e.g. `api.acme.com` and `app.other.io`): **not currently supported**. The `Domain` cookie attribute cannot span unrelated registrable domains regardless of configuration.
+Browsers reach Better Auth through the UI, which forwards `/api/auth/*` to this API. Better Auth's cookies are therefore set on the UI's origin, and the UI's server forwards them to the API on server-side requests. This works for any topology: same origin, sibling subdomains, unrelated domains, or platform domains like `*.run.app` and `*.vercel.app`. The API only needs to be reachable from the UI's server.
 
 ### flagd schemas
 

@@ -100,15 +100,15 @@ The UI reads the following variables:
 
 | Variable | Description |
 |----------|-------------|
-| `API_BASE_URL` | API base URL for server-side requests. Use the Docker service name in containerized environments. |
-| `BETTER_AUTH_URL` | BetterAuth base URL for server-side code. Use the Docker service name in containerized environments. |
-| `NEXT_PUBLIC_BETTER_AUTH_URL` | BetterAuth base URL for browser-side code. Must be publicly accessible. Baked into the bundle at build time. |
+| `API_BASE_URL` | API base URL for server-side requests and for forwarding the browser's `/api/auth/*` requests. Only needs to be reachable from the UI's server; use the Docker service name in containerized environments. |
 
 > **Note:** GitHub OAuth credentials (`GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`) are configured on the **API**, which acts as the auth server — not in the UI. See the [API README](../api/README.md) for how to set up the GitHub OAuth provider.
 
 ## Authentication
 
-We use [Better Auth](https://www.better-auth.com/) to handle authentication between the Next.js UI and the Fastify API backend. The API acts as the auth server while the UI uses the Better Auth React client to interact with it. Sessions are transported as HTTP cookies between the two apps.
+We use [Better Auth](https://www.better-auth.com/) to handle authentication between the Next.js UI and the Fastify API backend. The API acts as the auth server while the UI uses the Better Auth React client to interact with it.
+
+The browser only ever talks to the UI's origin. `proxy.ts` forwards every `/api/auth/*` request to `API_BASE_URL`, so Better Auth's cookies are first-party cookies on the UI's origin, wherever the API is hosted. The UI's server then forwards those cookies to the API on each server-side request.
 
 For details on how the API handles auth (route handling, session validation, etc.), see the [API README](../api/README.md).
 
@@ -116,7 +116,7 @@ For details on how the API handles auth (route handling, session validation, etc
 
 The auth client is created in `lib/auth-client.ts` using `createAuthClient` from `better-auth/react`. It is configured with:
 
-- **`baseURL`** — Points to the Fastify API (e.g., `http://localhost:8080`), so all auth requests (sign-in, sign-out, session checks) go directly to the API server rather than a Next.js API route.
+- **`baseURL`** — In the browser, the page's own origin, so auth requests (sign-in, sign-out, session checks) go through `proxy.ts`. In server actions, `API_BASE_URL`, so they call the API directly.
 - **`organizationClient()` plugin** — Enables multi-tenant organization and team support on the client.
 
 Key usage patterns:
@@ -132,10 +132,10 @@ Key usage patterns:
 
 1. User visits a protected page → `getSession()` forwards the incoming cookie header to the API's `/api/auth/get-session` endpoint and returns the full Better Auth session.
 2. If no valid session exists, the user is redirected to `/login`.
-3. User clicks "Login" → `authClient.signIn.social({ provider: "github" })` redirects the browser to the API, which in turn redirects to GitHub OAuth.
-4. After GitHub authorization, the callback is handled by the API. Better Auth creates a session, sets the session cookie, and redirects back to the UI.
-5. Subsequent API requests include the session cookie automatically. CORS is configured with `credentials: true` so cookies are sent cross-origin.
-6. On logout, `authClient.signOut()` posts to the API's sign-out endpoint, which clears the session and redirects to `/login`.
+3. User clicks "Login" → `authClient.signIn.social({ provider: "github" })` posts to the UI's `/api/auth/sign-in/social`, which is forwarded to the API. The API sets the OAuth state cookie on the UI's origin and redirects the browser to GitHub.
+4. GitHub redirects back to the UI's `/api/auth/callback/github`, which is forwarded to the API. Better Auth creates a session, sets the session cookie on the UI's origin, and redirects to the UI.
+5. Server-side requests forward the browser's cookie header to the API (see `utils/apiRequest.ts`).
+6. On logout, `authClient.signOut()` posts to the UI's `/api/auth/sign-out`, which is forwarded to the API to clear the session, and the UI redirects to `/login`.
 
 ### Server Action Pattern: `withSessionAction`
 
